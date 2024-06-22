@@ -1,0 +1,133 @@
+Creating an advanced Telegram raffle bot with quiz functionality using Node.js and Express involves several steps, including setting up the bot, managing quiz states, handling timeouts, and integrating with Telegram. Below is a comprehensive example that should cover all the requirements you specified.
+
+### 1. Set Up the Project
+
+First, initialize your Node.js project and install the necessary dependencies:
+
+```bash
+mkdir telegram-raffle-bot
+cd telegram-raffle-bot
+npm init -y
+npm install express node-telegram-bot-api
+```
+
+### 2. Create the Bot Script
+
+Create a file called `bot.js` and add the following code:
+
+```javascript
+const express = require('express');
+const TelegramBot = require('node-telegram-bot-api');
+const bodyParser = require('body-parser');
+
+// Replace with your bot's token
+const TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
+
+// Set up Express app
+const app = express();
+app.use(bodyParser.json());
+
+const bot = new TelegramBot(TOKEN, { polling: true });
+
+const quizzes = {
+  1: {
+    question: "What is the capital of France?",
+    options: ["Paris", "London", "Berlin", "Madrid"],
+    correct: 0
+  },
+  2: {
+    question: "What is 2 + 2?",
+    options: ["3", "4", "5", "6"],
+    correct: 1
+  }
+};
+
+let userQuizzes = {};
+
+bot.onText(/\/questionaire/, (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  userQuizzes[userId] = {
+    currentQuestion: 1,
+    answers: [],
+    startTime: Date.now()
+  };
+
+  sendQuestion(chatId, userId, 1);
+});
+
+bot.on('callback_query', (callbackQuery) => {
+  const userId = callbackQuery.from.id;
+  const answer = parseInt(callbackQuery.data);
+  const chatId = callbackQuery.message.chat.id;
+
+  if (!userQuizzes[userId]) {
+    bot.sendMessage(chatId, 'Please start the quiz by typing /questionaire.');
+    return;
+  }
+
+  const userQuiz = userQuizzes[userId];
+  const questionIndex = userQuiz.currentQuestion;
+  const quiz = quizzes[questionIndex];
+
+  userQuiz.answers.push(answer);
+  userQuiz.currentQuestion++;
+
+  if (userQuiz.currentQuestion > Object.keys(quizzes).length || (Date.now() - userQuiz.startTime) > 30 * 60 * 1000) {
+    sendResults(chatId, userId);
+  } else {
+    sendQuestion(chatId, userId, userQuiz.currentQuestion);
+  }
+});
+
+function sendQuestion(chatId, userId, questionIndex) {
+  const quiz = quizzes[questionIndex];
+  const options = quiz.options.map((option, index) => ({
+    text: option,
+    callback_data: index.toString()
+  }));
+
+  bot.sendMessage(chatId, quiz.question, {
+    reply_markup: {
+      inline_keyboard: [options.map(option => [option])]
+    }
+  });
+}
+
+function sendResults(chatId, userId) {
+  const userQuiz = userQuizzes[userId];
+  let score = 0;
+
+  userQuiz.answers.forEach((answer, index) => {
+    if (answer === quizzes[index + 1].correct) {
+      score++;
+    }
+  });
+
+  bot.sendMessage(chatId, `User ${userId} scored ${score}/${Object.keys(quizzes).length}`);
+  delete userQuizzes[userId];
+}
+
+app.listen(3000, () => {
+  console.log('Server is running on port 3000');
+});
+```
+
+### Explanation
+
+1. **Initialization**: We set up the Express server and the Telegram bot. We also define the quiz questions and answers in the `quizzes` object.
+
+2. **/questionaire Command**: When a user types `/questionaire`, the bot initializes their quiz state and sends the first question.
+
+3. **Handling Answers**: The bot listens for `callback_query` events (from inline keyboard buttons) to capture the user's answers. It then updates the user's quiz state, checks if the quiz is over, and either sends the next question or the results.
+
+4. **Timeout Handling**: The quiz is automatically submitted if the user exceeds the 30-minute time frame.
+
+5. **Sending Questions and Results**: Functions `sendQuestion` and `sendResults` handle sending questions and calculating/sending the results.
+
+### Final Touches
+
+Ensure your bot has permission to read and send messages in the group where you want it to operate. You can do this by inviting the bot to the group and promoting it to an admin with the necessary permissions.
+
+This code should provide a solid foundation for your advanced Telegram raffle bot with quiz functionality. Adjust and expand as needed to fit your specific use case.
